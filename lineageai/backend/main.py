@@ -69,7 +69,7 @@ async def scan(request: ScanRequest):
             if name:
                 all_tables.append(name.upper())
         all_relationships.extend(result.get("relationships", []))
-        all_column_lineage.extend(result.get("column_lineage", []))
+        all_column_lineage.extend(_normalize_column_lineage(result.get("column_lineage", [])))
 
     # Step 3: Deduplicate tables (preserve order)
     unique_tables = list(dict.fromkeys(all_tables))
@@ -84,6 +84,75 @@ async def scan(request: ScanRequest):
         "relationships": all_relationships,
         "column_lineage": all_column_lineage,
     }
+
+
+def _normalize_column_lineage(entries: list) -> list:
+    """Normalize all LLM column_lineage variant formats into a canonical dict:
+    {target_table, target_column, source_table, source_column, transformation}
+    """
+    normalized = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+
+        # Canonical format already (target_table + target_column + source_table + source_column)
+        if entry.get("target_table") and entry.get("source_table"):
+            normalized.append({
+                "target_table": entry["target_table"],
+                "target_column": entry.get("target_column", ""),
+                "source_table": entry["source_table"],
+                "source_column": entry.get("source_column", ""),
+                "transformation": entry.get("transformation", ""),
+            })
+
+        # Format: {target_column, source_table, source_column} — missing target_table
+        elif entry.get("source_table") and entry.get("target_column"):
+            # Handle source_columns array variant
+            source_cols = entry.get("source_columns")
+            if source_cols and isinstance(source_cols, list):
+                for sc in source_cols:
+                    if isinstance(sc, dict) and sc.get("table"):
+                        normalized.append({
+                            "target_table": "",
+                            "target_column": entry["target_column"],
+                            "source_table": sc["table"],
+                            "source_column": sc.get("column", ""),
+                            "transformation": entry.get("transformation", ""),
+                        })
+            else:
+                normalized.append({
+                    "target_table": "",
+                    "target_column": entry["target_column"],
+                    "source_table": entry["source_table"],
+                    "source_column": entry.get("source_column", ""),
+                    "transformation": entry.get("transformation", ""),
+                })
+
+        # Format: {target, source} where source is "table.column"
+        elif entry.get("source") and "." in str(entry.get("source", "")):
+            src = entry["source"]
+            parts = src.split(".", 1)
+            normalized.append({
+                "target_table": "",
+                "target_column": entry.get("target") or entry.get("target_column", ""),
+                "source_table": parts[0],
+                "source_column": parts[1],
+                "transformation": entry.get("transformation", ""),
+            })
+
+        # source_columns array without source_table
+        elif entry.get("target_column") and entry.get("source_columns"):
+            for sc in entry["source_columns"]:
+                if isinstance(sc, dict) and sc.get("table"):
+                    normalized.append({
+                        "target_table": "",
+                        "target_column": entry["target_column"],
+                        "source_table": sc["table"],
+                        "source_column": sc.get("column", ""),
+                        "transformation": entry.get("transformation", ""),
+                    })
+
+    return normalized
 
 
 def _extract_repo_name(repo_url: str) -> str:

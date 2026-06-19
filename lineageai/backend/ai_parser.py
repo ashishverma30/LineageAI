@@ -23,7 +23,12 @@ SYSTEM_PROMPT = (
 
 USER_PROMPT_TEMPLATE = (
     "Extract all tables, columns, joins, and lineage from this file. "
-    "Return JSON with keys: tables, relationships, column_lineage. "
+    "Return ONLY valid JSON with exactly these keys:\n"
+    '  "tables": list of table name strings\n'
+    '  "relationships": list of {{"from": "table", "to": "table", "key": "column"}}\n'
+    '  "column_lineage": list of {{"target_table": "table", "target_column": "col", '
+    '"source_table": "table", "source_column": "col", "transformation": "optional"}}\n'
+    "Every column_lineage entry MUST have target_table, target_column, source_table, and source_column.\n"
     "FILE:\n{content}"
 )
 

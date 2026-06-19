@@ -67,16 +67,32 @@ export default function DiagramView({ data, onTableClick }) {
         const svgEl = containerRef.current.querySelector("svg");
         if (!svgEl) return;
 
-        // Mermaid v10 ER entities: try multiple selectors
-        const sanitizedTables = data.tables.map(sanitize);
+        // Build a case-insensitive lookup: sanitized-lowercase → canonical name.
+        // Include tables from data.tables AND from relationship from/to fields so
+        // the SVG nodes (derived from relationships) always get matched.
+        const tableMap = new Map();
+        (data.tables || []).forEach((t) => {
+          tableMap.set(sanitize(t).toLowerCase(), t);
+        });
+        (data.relationships || []).forEach((rel) => {
+          const rawFrom = rel.from || rel.from_table || rel.left_table || rel.source;
+          const rawTo   = rel.to   || rel.to_table   || rel.right_table || rel.target;
+          [rawFrom, rawTo].forEach((raw) => {
+            if (!raw) return;
+            const name = raw.includes(".") ? raw.split(".")[0] : raw;
+            const key = sanitize(name).toLowerCase();
+            if (!tableMap.has(key)) tableMap.set(key, name);
+          });
+        });
+
         const allTexts = svgEl.querySelectorAll("text, tspan");
         const hitTargets = new Set();
 
         allTexts.forEach((textEl) => {
           const label = textEl.textContent?.trim();
           if (!label) return;
-          const idx = sanitizedTables.indexOf(sanitize(label));
-          if (idx === -1) return;
+          const canonical = tableMap.get(sanitize(label).toLowerCase());
+          if (!canonical) return;
 
           // Walk up to find the nearest <g> container to attach click to
           let target = textEl.closest("g[id], g.node, g.er, g") || textEl;
@@ -86,7 +102,7 @@ export default function DiagramView({ data, onTableClick }) {
 
           target.style.cursor = "pointer";
           target.addEventListener("click", () => {
-            onTableClick(data.tables[idx]);
+            onTableClick(canonical);
           });
         });
       } catch (err) {
