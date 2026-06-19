@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
 import mermaid from "mermaid";
 
 mermaid.initialize({
@@ -10,12 +10,47 @@ mermaid.initialize({
 function buildMermaidSyntax(data) {
   const lines = ["erDiagram"];
 
+  // Build case-insensitive column lookup: sanitized-lowercase table → [col, ...]
+  const columnsByTable = data.columns_by_table || {};
+  const colMap = new Map();
+  Object.entries(columnsByTable).forEach(([tbl, cols]) => {
+    colMap.set(sanitize(tbl).toLowerCase(), cols);
+  });
+
+  // Collect every table that will appear (from relationships + data.tables)
+  const allTables = new Set();
+  (data.tables || []).forEach((t) => allTables.add(t));
+  (data.relationships || []).forEach((rel) => {
+    const rawFrom = rel.from || rel.from_table || rel.left_table || rel.source;
+    const rawTo   = rel.to   || rel.to_table   || rel.right_table || rel.target;
+    [rawFrom, rawTo].forEach((raw) => {
+      if (!raw) return;
+      allTables.add(raw.includes(".") ? raw.split(".")[0] : raw);
+    });
+  });
+
+  // Emit entity blocks with columns (cap at 12 to keep diagram readable)
+  const emitted = new Set();
+  allTables.forEach((table) => {
+    const key = sanitize(table).toLowerCase();
+    if (emitted.has(key)) return;
+    emitted.add(key);
+    const cols = colMap.get(key) || [];
+    if (cols.length > 0) {
+      lines.push(`  ${sanitize(table)} {`);
+      cols.slice(0, 12).forEach((col) => {
+        lines.push(`    string ${sanitize(col)}`);
+      });
+      lines.push(`  }`);
+    }
+  });
+
+  // Emit relationships
   if (data.relationships && data.relationships.length > 0) {
     const seen = new Set();
     for (const rel of data.relationships) {
-      // Extract table name — handles "table", "table.column", or explicit fields
       const extractTable = (val) => val && val.includes(".") ? val.split(".")[0] : val;
-      const extractCol  = (val) => val && val.includes(".") ? val.split(".")[1] : null;
+      const extractCol   = (val) => val && val.includes(".") ? val.split(".")[1] : null;
 
       const rawFrom = rel.from || rel.from_table || rel.left_table || rel.source;
       const rawTo   = rel.to   || rel.to_table   || rel.right_table || rel.target;
@@ -30,11 +65,14 @@ function buildMermaidSyntax(data) {
       seen.add(edge);
       lines.push(`    ${sanitize(fromTable)} ||--o{ ${sanitize(toTable)} : "${key}"`);
     }
-  } else if (data.tables && data.tables.length > 0) {
-    // No relationships — just list tables so something renders
-    for (const table of data.tables) {
-      lines.push(`    ${sanitize(table)} { string id }`);
-    }
+  } else {
+    // No relationships — emit placeholder column block so Mermaid renders something
+    (data.tables || []).forEach((table) => {
+      const key = sanitize(table).toLowerCase();
+      if (!colMap.has(key)) {
+        lines.push(`    ${sanitize(table)} { string id }`);
+      }
+    });
   }
 
   return lines.join("\n");
@@ -47,9 +85,8 @@ function sanitize(name) {
 
 let diagramCounter = 0;
 
-export default function DiagramView({ data, onTableClick }) {
+export default function DiagramView({ data, onTableClick, highlightTable }) {
   const containerRef = useRef(null);
-  const [search, setSearch] = useState("");
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -117,60 +154,28 @@ export default function DiagramView({ data, onTableClick }) {
     render();
   }, [data, onTableClick]);
 
-  // Dim/highlight SVG entity nodes based on search
+  // Dim all entity nodes except the highlighted table when one is selected in L1
   useEffect(() => {
     if (!containerRef.current) return;
     const svgEl = containerRef.current.querySelector("svg");
     if (!svgEl) return;
     const entities = svgEl.querySelectorAll('g[id^="entity-"]');
     entities.forEach((g) => {
-      if (!search) {
+      if (!highlightTable) {
         g.style.opacity = "1";
         return;
       }
       const label = g.querySelector("text")?.textContent?.trim() || "";
-      g.style.opacity = label.toLowerCase().includes(search.toLowerCase()) ? "1" : "0.15";
+      g.style.opacity = label.toLowerCase() === highlightTable.toLowerCase() ? "1" : "0.2";
     });
-  }, [search]);
-
-  const filteredTables = data.tables.filter((t) =>
-    t.toLowerCase().includes(search.toLowerCase())
-  );
+  }, [highlightTable]);
 
   return (
     <div className="diagram-wrapper">
       <h2 className="section-title">Entity Relationship Diagram</h2>
-
-      <div className="diagram-search-row">
-        <input
-          className="diagram-search"
-          type="text"
-          placeholder="Search tables…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        {search && (
-          <button className="diagram-search-clear" onClick={() => setSearch("")}>
-            ✕
-          </button>
-        )}
-      </div>
-
-      <div className="table-chips">
-        {filteredTables.map((table) => (
-          <button
-            key={table}
-            className="table-chip"
-            onClick={() => onTableClick(table)}
-          >
-            {table}
-          </button>
-        ))}
-        {filteredTables.length === 0 && search && (
-          <span className="no-match">No tables match "{search}"</span>
-        )}
-      </div>
-
+      {highlightTable && (
+        <p className="diagram-hint">Showing: <strong>{highlightTable}</strong> — click another node or clear selection to reset</p>
+      )}
       <div className="diagram-container" ref={containerRef} />
     </div>
   );

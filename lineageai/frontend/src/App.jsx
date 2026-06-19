@@ -2,7 +2,8 @@ import React, { useState, useCallback } from "react";
 import axios from "axios";
 import ScanForm from "./ScanForm";
 import DiagramView from "./DiagramView";
-import LineagePanel from "./LineagePanel";
+import LeftPanel from "./LeftPanel";
+import ColumnFlow from "./ColumnFlow";
 import "./App.css";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
@@ -11,46 +12,54 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [diagramData, setDiagramData] = useState(null);
+
+  // L1 — selected table (highlights it in the ER diagram)
   const [selectedTable, setSelectedTable] = useState(null);
+  // L2 — selected column within selected table (shows column lineage flow)
+  const [selectedColumn, setSelectedColumn] = useState(null);
+  // L3 — SOR table + column (shows downstream SOR flow)
+  const [selectedSorTable, setSelectedSorTable] = useState(null);
+  const [selectedSorColumn, setSelectedSorColumn] = useState(null);
 
   async function handleScan(repoUrl, token) {
     setLoading(true);
     setError(null);
     setDiagramData(null);
     setSelectedTable(null);
-
+    setSelectedColumn(null);
+    setSelectedSorTable(null);
+    setSelectedSorColumn(null);
     try {
-      const { data } = await axios.post(`${BACKEND_URL}/scan`, {
-        repo_url: repoUrl,
-        token,
-      });
+      const { data } = await axios.post(`${BACKEND_URL}/scan`, { repo_url: repoUrl, token });
       setDiagramData(data);
     } catch (err) {
-      const message =
-        err.response?.data?.detail || err.message || "Unknown error occurred";
-      setError(message);
+      setError(err.response?.data?.detail || err.message || "Unknown error occurred");
     } finally {
       setLoading(false);
     }
   }
 
-  const handleTableClick = useCallback((tableName) => {
-    setSelectedTable(tableName);
+  const handleTableSelect = useCallback((table) => {
+    setSelectedTable(table);
+    setSelectedColumn(null); // reset column when table changes
   }, []);
 
-  const handlePanelClose = useCallback(() => {
-    setSelectedTable(null);
+  const handleColumnSelect = useCallback((col) => {
+    setSelectedColumn(col);
   }, []);
 
-  // Filter column_lineage for rows that belong to the selected table (target_table)
-  // or fall back to source_table for legacy entries without a target_table
-  const columnLineageForTable = selectedTable
-    ? (diagramData?.column_lineage || []).filter((cl) => {
-        const tgt = (cl.target_table || cl.table || "").toLowerCase();
-        const src = (cl.source_table || cl.source || "").toLowerCase().split(".")[0];
-        return tgt === selectedTable.toLowerCase() || src === selectedTable.toLowerCase();
-      })
-    : [];
+  const handleSorTableSelect = useCallback((tbl) => {
+    setSelectedSorTable(tbl);
+    setSelectedSorColumn(null);
+  }, []);
+
+  const handleSorColumnSelect = useCallback((col) => {
+    setSelectedSorColumn(col);
+  }, []);
+
+  // Derive right-panel mode from what the user has selected
+  // SOR flow takes priority, then column lineage, then ER diagram
+  const rightMode = selectedSorColumn ? "sor" : selectedColumn ? "column" : "diagram";
 
   return (
     <div className="app">
@@ -59,15 +68,9 @@ export default function App() {
         <p className="app-subtitle">Data Lineage for American Express Marketing Technology</p>
       </header>
 
-      <main className="app-main">
+      <div className="app-top">
         <ScanForm onScan={handleScan} loading={loading} />
-
-        {error && (
-          <div className="error-banner" role="alert">
-            {error}
-          </div>
-        )}
-
+        {error && <div className="error-banner" role="alert">{error}</div>}
         {diagramData && (
           <div className="scan-summary">
             <span>Repo: <strong>{diagramData.repo}</strong></span>
@@ -75,18 +78,48 @@ export default function App() {
             <span>Tables found: <strong>{diagramData.tables.length}</strong></span>
           </div>
         )}
+      </div>
 
-        {diagramData && (
-          <DiagramView data={diagramData} onTableClick={handleTableClick} />
-        )}
-      </main>
+      {diagramData && (
+        <div className="two-panel-layout">
+          <LeftPanel
+            data={diagramData}
+            selectedTable={selectedTable}
+            onTableSelect={handleTableSelect}
+            selectedColumn={selectedColumn}
+            onColumnSelect={handleColumnSelect}
+            selectedSorTable={selectedSorTable}
+            onSorTableSelect={handleSorTableSelect}
+            selectedSorColumn={selectedSorColumn}
+            onSorColumnSelect={handleSorColumnSelect}
+          />
 
-      {selectedTable && (
-        <LineagePanel
-          tableName={selectedTable}
-          columnLineage={columnLineageForTable}
-          onClose={handlePanelClose}
-        />
+          <div className="right-panel">
+            {rightMode === "diagram" && (
+              <DiagramView
+                data={diagramData}
+                onTableClick={handleTableSelect}
+                highlightTable={selectedTable}
+              />
+            )}
+            {rightMode === "column" && (
+              <ColumnFlow
+                mode="column"
+                tableName={selectedTable}
+                columnName={selectedColumn}
+                columnLineage={diagramData.column_lineage || []}
+              />
+            )}
+            {rightMode === "sor" && (
+              <ColumnFlow
+                mode="sor"
+                sorTable={selectedSorTable}
+                sorColumn={selectedSorColumn}
+                columnLineage={diagramData.column_lineage || []}
+              />
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

@@ -74,7 +74,20 @@ async def scan(request: ScanRequest):
     # Step 3: Deduplicate tables (preserve order)
     unique_tables = list(dict.fromkeys(all_tables))
 
-    # Step 4: Extract repo name from URL
+    # Step 4: Build columns_by_table from normalized column_lineage
+    columns_by_table = _build_columns_by_table(all_column_lineage)
+
+    # Step 5: Identify SOR (source-of-record) tables — tables that appear only
+    # as source, never as a target, in the column lineage graph
+    target_tables = {e.get("target_table", "").lower() for e in all_column_lineage if e.get("target_table")}
+    source_tables = {e.get("source_table", "").lower() for e in all_column_lineage if e.get("source_table")}
+    sor_set = source_tables - target_tables
+    sor_tables = [t for t in unique_tables if t.lower() in sor_set]
+    # Fallback: if none detected, use raw_/src_ prefix convention
+    if not sor_tables:
+        sor_tables = [t for t in unique_tables if t.lower().startswith(("raw_", "src_", "source_"))]
+
+    # Step 6: Extract repo name from URL
     repo_name = _extract_repo_name(request.repo_url)
 
     return {
@@ -83,6 +96,8 @@ async def scan(request: ScanRequest):
         "tables": unique_tables,
         "relationships": all_relationships,
         "column_lineage": all_column_lineage,
+        "columns_by_table": columns_by_table,
+        "sor_tables": sor_tables,
     }
 
 
@@ -153,6 +168,21 @@ def _normalize_column_lineage(entries: list) -> list:
                     })
 
     return normalized
+
+
+def _build_columns_by_table(column_lineage: list) -> dict:
+    """Derive {table_name: [col1, col2, ...]} from normalized column_lineage.
+    Collects both target and source columns so every table in the lineage graph
+    gets its columns surfaced.
+    """
+    cols: dict = {}
+    for entry in column_lineage:
+        for tbl_key, col_key in [("target_table", "target_column"), ("source_table", "source_column")]:
+            tbl = entry.get(tbl_key, "").strip().lower()
+            col = entry.get(col_key, "").strip().lower()
+            if tbl and col:
+                cols.setdefault(tbl, set()).add(col)
+    return {tbl: sorted(col_set) for tbl, col_set in cols.items()}
 
 
 def _extract_repo_name(repo_url: str) -> str:
