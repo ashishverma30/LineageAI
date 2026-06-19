@@ -100,7 +100,14 @@ export default function App() {
           />
 
           <div className="right-panel">
-            {rightMode === "diagram" && (
+            {rightMode === "diagram" && !selectedTable && (
+              <div className="right-panel-empty">
+                <div className="right-panel-empty-icon">⬡</div>
+                <p>Select a table from the left panel</p>
+                <span>Its ER diagram and direct relationships will appear here</span>
+              </div>
+            )}
+            {rightMode === "diagram" && selectedTable && (
               <DiagramView
                 data={diagramData}
                 onTableClick={handleTableSelect}

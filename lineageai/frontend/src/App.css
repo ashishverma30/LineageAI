@@ -594,6 +594,36 @@ body {
   letter-spacing: 0.4px;
 }
 
+/* ── Right Panel Empty State ──────────────────────────────── */
+.right-panel-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 12px;
+  color: #9aa5c4;
+  user-select: none;
+}
+
+.right-panel-empty-icon {
+  font-size: 56px;
+  line-height: 1;
+  opacity: 0.25;
+}
+
+.right-panel-empty p {
+  font-size: 16px;
+  font-weight: 600;
+  color: #6b7897;
+  margin: 0;
+}
+
+.right-panel-empty span {
+  font-size: 13px;
+  color: #9aa5c4;
+}
+
 /* ── Diagram ──────────────────────────────────────────────── */
 .diagram-wrapper {
   margin-bottom: 24px;

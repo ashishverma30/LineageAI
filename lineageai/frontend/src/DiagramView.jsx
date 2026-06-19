@@ -7,17 +7,83 @@ mermaid.initialize({
   er: { diagramPadding: 20, layoutDirection: "TB" },
 });
 
+function extractTable(val) {
+  return val && val.includes(".") ? val.split(".")[0] : val;
+}
+
+function extractCol(val) {
+  return val && val.includes(".") ? val.split(".")[1] : null;
+}
+
+/** Return only the selected table + its direct relationship neighbors */
+function buildFocusedData(data, focusTable) {
+  const focus = focusTable.toLowerCase();
+
+  // Collect FK columns used in relationships (to treat as key columns)
+  const fkCols = new Set();
+  const focusedRels = [];
+  (data.relationships || []).forEach((rel) => {
+    const from = (extractTable(rel.from || rel.from_table || rel.left_table || rel.source) || "").toLowerCase();
+    const to   = (extractTable(rel.to   || rel.to_table   || rel.right_table || rel.target) || "").toLowerCase();
+    if (from === focus || to === focus) {
+      focusedRels.push(rel);
+      const key = rel.key || rel.join_key || rel.from_column || rel.left_column || extractCol(rel.from || "");
+      if (key) fkCols.add(key.toLowerCase());
+    }
+  });
+
+  // Tables in this neighbourhood
+  const neighbourSet = new Set([focusTable]);
+  focusedRels.forEach((rel) => {
+    const from = extractTable(rel.from || rel.from_table || rel.left_table || rel.source);
+    const to   = extractTable(rel.to   || rel.to_table   || rel.right_table || rel.target);
+    if (from) neighbourSet.add(from);
+    if (to)   neighbourSet.add(to);
+  });
+
+  return {
+    ...data,
+    tables: [...neighbourSet],
+    relationships: focusedRels,
+    _fkCols: fkCols,
+  };
+}
+
+/** Pick the most important columns for an entity box.
+ *  Priority: FK join cols > *_id/*_key/*_pk/*_fk patterns > others.
+ *  Cap at MAX_COLS total.
+ */
+const MAX_COLS = 6;
+
+function prioritizeCols(cols, fkCols) {
+  const isKey = (c) => {
+    const lc = c.toLowerCase();
+    return (
+      fkCols.has(lc) ||
+      lc === "id" ||
+      lc.endsWith("_id") ||
+      lc.endsWith("_key") ||
+      lc.endsWith("_pk") ||
+      lc.endsWith("_fk")
+    );
+  };
+  const keys  = cols.filter((c) => isKey(c));
+  const rest  = cols.filter((c) => !isKey(c));
+  return [...keys, ...rest].slice(0, MAX_COLS);
+}
+
 function buildMermaidSyntax(data) {
   const lines = ["erDiagram"];
+  const fkCols = data._fkCols || new Set();
 
-  // Build case-insensitive column lookup: sanitized-lowercase table → [col, ...]
+  // Build case-insensitive column lookup
   const columnsByTable = data.columns_by_table || {};
   const colMap = new Map();
   Object.entries(columnsByTable).forEach(([tbl, cols]) => {
     colMap.set(sanitize(tbl).toLowerCase(), cols);
   });
 
-  // Collect every table that will appear (from relationships + data.tables)
+  // Collect tables
   const allTables = new Set();
   (data.tables || []).forEach((t) => allTables.add(t));
   (data.relationships || []).forEach((rel) => {
@@ -29,16 +95,17 @@ function buildMermaidSyntax(data) {
     });
   });
 
-  // Emit entity blocks with columns (cap at 12 to keep diagram readable)
+  // Emit entity blocks with smart column selection
   const emitted = new Set();
   allTables.forEach((table) => {
     const key = sanitize(table).toLowerCase();
     if (emitted.has(key)) return;
     emitted.add(key);
-    const cols = colMap.get(key) || [];
+    const allCols = colMap.get(key) || [];
+    const cols = prioritizeCols(allCols, fkCols);
     if (cols.length > 0) {
       lines.push(`  ${sanitize(table)} {`);
-      cols.slice(0, 12).forEach((col) => {
+      cols.forEach((col) => {
         lines.push(`    string ${sanitize(col)}`);
       });
       lines.push(`  }`);
@@ -49,9 +116,6 @@ function buildMermaidSyntax(data) {
   if (data.relationships && data.relationships.length > 0) {
     const seen = new Set();
     for (const rel of data.relationships) {
-      const extractTable = (val) => val && val.includes(".") ? val.split(".")[0] : val;
-      const extractCol   = (val) => val && val.includes(".") ? val.split(".")[1] : null;
-
       const rawFrom = rel.from || rel.from_table || rel.left_table || rel.source;
       const rawTo   = rel.to   || rel.to_table   || rel.right_table || rel.target;
       const fromTable = extractTable(rawFrom);
@@ -66,7 +130,6 @@ function buildMermaidSyntax(data) {
       lines.push(`    ${sanitize(fromTable)} ||--o{ ${sanitize(toTable)} : "${key}"`);
     }
   } else {
-    // No relationships — emit placeholder column block so Mermaid renders something
     (data.tables || []).forEach((table) => {
       const key = sanitize(table).toLowerCase();
       if (!colMap.has(key)) {
@@ -91,7 +154,9 @@ export default function DiagramView({ data, onTableClick, highlightTable }) {
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const definition = buildMermaidSyntax(data);
+    // When a table is selected, show only it and its direct neighbours
+    const renderData = highlightTable ? buildFocusedData(data, highlightTable) : data;
+    const definition = buildMermaidSyntax(renderData);
 
     async function render() {
       try {
@@ -106,14 +171,12 @@ export default function DiagramView({ data, onTableClick, highlightTable }) {
         const svgEl = containerRef.current.querySelector("svg");
         if (!svgEl) return;
 
-        // Build a case-insensitive lookup: sanitized-lowercase → canonical name.
-        // Include tables from data.tables AND from relationship from/to fields so
-        // the SVG nodes (derived from relationships) always get matched.
+        // Build a case-insensitive lookup from the rendered data (focused subset)
         const tableMap = new Map();
-        (data.tables || []).forEach((t) => {
+        (renderData.tables || []).forEach((t) => {
           tableMap.set(sanitize(t).toLowerCase(), t);
         });
-        (data.relationships || []).forEach((rel) => {
+        (renderData.relationships || []).forEach((rel) => {
           const rawFrom = rel.from || rel.from_table || rel.left_table || rel.source;
           const rawTo   = rel.to   || rel.to_table   || rel.right_table || rel.target;
           [rawFrom, rawTo].forEach((raw) => {
@@ -152,23 +215,7 @@ export default function DiagramView({ data, onTableClick, highlightTable }) {
     }
 
     render();
-  }, [data, onTableClick]);
-
-  // Dim all entity nodes except the highlighted table when one is selected in L1
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const svgEl = containerRef.current.querySelector("svg");
-    if (!svgEl) return;
-    const entities = svgEl.querySelectorAll('g[id^="entity-"]');
-    entities.forEach((g) => {
-      if (!highlightTable) {
-        g.style.opacity = "1";
-        return;
-      }
-      const label = g.querySelector("text")?.textContent?.trim() || "";
-      g.style.opacity = label.toLowerCase() === highlightTable.toLowerCase() ? "1" : "0.2";
-    });
-  }, [highlightTable]);
+  }, [data, onTableClick, highlightTable]);
 
   return (
     <div className="diagram-wrapper">
