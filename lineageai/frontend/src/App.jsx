@@ -76,6 +76,11 @@ export default function App() {
             <span>Repo: <strong>{diagramData.repo}</strong></span>
             <span>Files scanned: <strong>{diagramData.scanned_files}</strong></span>
             <span>Tables found: <strong>{diagramData.tables.length}</strong></span>
+            {diagramData.cached && (
+              <span className="cached-badge" title="Result served from cache — no LLM calls made">
+                Cached
+              </span>
+            )}
           </div>
         )}
       </div>
