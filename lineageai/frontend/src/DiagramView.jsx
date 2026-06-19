@@ -49,18 +49,19 @@ let diagramCounter = 0;
 
 export default function DiagramView({ data, onTableClick }) {
   const containerRef = useRef(null);
-  const idRef = useRef(`mermaid-${++diagramCounter}`);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
     if (!containerRef.current) return;
 
     const definition = buildMermaidSyntax(data);
-    const id = idRef.current;
 
     async function render() {
       try {
         containerRef.current.innerHTML = "";
+        // Use a fresh ID every render to prevent Mermaid's internal ID cache
+        // from returning a stale or duplicate SVG
+        const id = `mermaid-${++diagramCounter}`;
         const { svg } = await mermaid.render(id, definition);
         containerRef.current.innerHTML = svg;
 
