@@ -1,7 +1,8 @@
 import React from "react";
 
 export default function LineagePanel({ tableName, columnLineage, onClose }) {
-  const columns = columnLineage?.columns || [];
+  // columnLineage is a flat array of {source_table, source_column, target_column, transformation}
+  const columns = Array.isArray(columnLineage) ? columnLineage : [];
 
   return (
     <aside className="lineage-panel" role="complementary" aria-label="Column Lineage">
@@ -29,9 +30,13 @@ export default function LineagePanel({ tableName, columnLineage, onClose }) {
             <tbody>
               {columns.map((col, idx) => (
                 <tr key={idx}>
-                  <td className="col-name">{col.name}</td>
-                  <td className="col-source">{col.source || "—"}</td>
-                  <td className="col-transform">{col.transformation || "—"}</td>
+                  <td className="col-name">{col.target_column || col.name || "—"}</td>
+                  <td className="col-source">
+                    {col.source_table && col.source_column
+                      ? `${col.source_table}.${col.source_column}`
+                      : col.source || "—"}
+                  </td>
+                  <td className="col-transform">{col.transformation || "direct map"}</td>
                 </tr>
               ))}
             </tbody>

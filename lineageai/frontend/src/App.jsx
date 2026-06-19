@@ -42,9 +42,13 @@ export default function App() {
     setSelectedTable(null);
   }
 
+  // Filter flat column_lineage array for rows where source_table matches the selected table
   const columnLineageForTable = selectedTable
-    ? (diagramData?.column_lineage || []).find((cl) => cl.table === selectedTable)
-    : null;
+    ? (diagramData?.column_lineage || []).filter((cl) => {
+        const src = (cl.source_table || cl.table || cl.source || "").toLowerCase();
+        return src === selectedTable.toLowerCase();
+      })
+    : [];
 
   return (
     <div className="app">

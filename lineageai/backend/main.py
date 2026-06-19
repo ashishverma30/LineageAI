@@ -1,3 +1,6 @@
+import logging
+import traceback
+import asyncio
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
@@ -9,6 +12,7 @@ from ai_parser import analyze_file
 from scanner import scan_repo
 
 load_dotenv()
+logging.basicConfig(level=logging.INFO)
 
 
 @asynccontextmanager
@@ -28,7 +32,7 @@ app.add_middleware(
 
 class ScanRequest(BaseModel):
     repo_url: str
-    token: str
+    token: str = ""
 
 
 @app.get("/health")
@@ -44,20 +48,30 @@ async def scan(request: ScanRequest):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to access repository: {str(e)}")
+        logging.error("scan_repo failed: %s", traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to access repository: {type(e).__name__}: {e}")
 
     # Step 2: Run each file through the LLM parser and merge results
     all_tables: list[str] = []
     all_relationships: list[dict] = []
     all_column_lineage: list[dict] = []
 
-    for file in files:
-        result = await analyze_file(file["content"])
-        all_tables.extend(result.get("tables", []))
+    # Run all files through the LLM in parallel
+    results = await asyncio.gather(*[analyze_file(f["content"]) for f in files])
+
+    for result in results:
+        # Normalize tables — Claude may return strings or dicts like {"name": "TABLE"}
+        for t in result.get("tables", []):
+            if isinstance(t, dict):
+                name = t.get("name") or t.get("table_name") or t.get("table") or str(t)
+            else:
+                name = str(t)
+            if name:
+                all_tables.append(name.upper())
         all_relationships.extend(result.get("relationships", []))
         all_column_lineage.extend(result.get("column_lineage", []))
 
-    # Step 3: Deduplicate tables
+    # Step 3: Deduplicate tables (preserve order)
     unique_tables = list(dict.fromkeys(all_tables))
 
     # Step 4: Extract repo name from URL

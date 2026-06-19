@@ -116,6 +116,33 @@ body {
   gap: 8px;
 }
 
+/* ── Table Chips ──────────────────────────────────────────── */
+.table-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.table-chip {
+  padding: 5px 14px;
+  background: #e8f0fe;
+  color: #1E2761;
+  border: 1px solid #b3c5f5;
+  border-radius: 20px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  font-family: monospace;
+}
+
+.table-chip:hover {
+  background: #2196F3;
+  color: #fff;
+  border-color: #2196F3;
+}
+
 /* ── Spinner ──────────────────────────────────────────────── */
 .spinner {
   display: inline-block;

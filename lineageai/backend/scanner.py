@@ -16,9 +16,9 @@ async def scan_repo(repo_url: str, token: str) -> list[dict]:
 
     # Support GitHub Enterprise by passing a custom base_url
     if base_url == "https://api.github.com":
-        gh = Github(token)
+        gh = Github(token) if token else Github()
     else:
-        gh = Github(base_url=base_url, login_or_token=token)
+        gh = Github(base_url=base_url, login_or_token=token) if token else Github(base_url=base_url)
 
     # Extract "org/repo" from full URL
     repo_path = _parse_repo_path(repo_url)
@@ -26,7 +26,10 @@ async def scan_repo(repo_url: str, token: str) -> list[dict]:
     try:
         repo = gh.get_repo(repo_path)
     except GithubException as e:
-        raise ValueError(f"Could not access repo '{repo_path}': {e.data.get('message', str(e))}")
+        msg = e.data.get("message", "") if isinstance(e.data, dict) else str(e.data)
+        raise ValueError(f"Could not access repo '{repo_path}': {msg or str(e)}")
+    except Exception as e:
+        raise ValueError(f"Could not access repo '{repo_path}': {type(e).__name__}: {e}")
 
     files = []
     _walk_tree(repo, "", files)
@@ -35,7 +38,7 @@ async def scan_repo(repo_url: str, token: str) -> list[dict]:
 
 def _parse_repo_path(repo_url: str) -> str:
     """Extract 'org/repo' from a GitHub URL or return as-is if already that format."""
-    url = repo_url.rstrip("/")
+    url = repo_url.rstrip("/").removesuffix(".git")
     # Handle full URLs like https://github.com/org/repo or https://github.example.com/org/repo
     if "://" in url:
         parts = url.split("/")

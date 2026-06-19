@@ -6,7 +6,7 @@ export default function ScanForm({ onScan, loading }) {
 
   function handleSubmit(e) {
     e.preventDefault();
-    if (repoUrl.trim() && token.trim()) {
+    if (repoUrl.trim()) {
       onScan(repoUrl.trim(), token.trim());
     }
   }
@@ -27,7 +27,7 @@ export default function ScanForm({ onScan, loading }) {
       </div>
 
       <div className="form-group">
-        <label htmlFor="token">Access Token</label>
+        <label htmlFor="token">Access Token <span style={{fontWeight:"normal",opacity:0.6}}>(optional for public repos)</span></label>
         <input
           id="token"
           type="password"
@@ -35,14 +35,13 @@ export default function ScanForm({ onScan, loading }) {
           value={token}
           onChange={(e) => setToken(e.target.value)}
           disabled={loading}
-          required
         />
       </div>
 
       <button
         type="submit"
         className="scan-btn"
-        disabled={loading || !repoUrl.trim() || !token.trim()}
+        disabled={loading || !repoUrl.trim()}
       >
         {loading ? (
           <span className="btn-inner">

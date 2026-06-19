@@ -7,9 +7,11 @@ To swap Claude for Llama3, change these 3 lines:
   LINE C: The _call_llm() function body — replace Anthropic messages API with Llama3 equivalent
 """
 
+import asyncio
 import json
 import os
 import re
+from functools import partial
 
 import anthropic  # LINE A — swap this import for Llama3
 
@@ -61,10 +63,11 @@ def _parse_json(raw: str) -> dict:
 
 
 async def analyze_file(content: str) -> dict:
-    """Call LLM on a single file's content. Never raises — returns empty arrays on failure."""
+    """Call LLM on a single file's content. Runs sync client in thread pool. Never raises."""
     try:
         client = _get_client()
-        raw = _call_llm(client, content)
+        loop = asyncio.get_event_loop()
+        raw = await loop.run_in_executor(None, partial(_call_llm, client, content))
         return _parse_json(raw)
     except Exception:
         return dict(EMPTY_RESULT)
