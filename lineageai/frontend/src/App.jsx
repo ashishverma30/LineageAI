@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import axios from "axios";
 import ScanForm from "./ScanForm";
 import DiagramView from "./DiagramView";
@@ -34,13 +34,13 @@ export default function App() {
     }
   }
 
-  function handleTableClick(tableName) {
+  const handleTableClick = useCallback((tableName) => {
     setSelectedTable(tableName);
-  }
+  }, []);
 
-  function handlePanelClose() {
+  const handlePanelClose = useCallback(() => {
     setSelectedTable(null);
-  }
+  }, []);
 
   // Filter column_lineage for rows that belong to the selected table (target_table)
   // or fall back to source_table for legacy entries without a target_table

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import mermaid from "mermaid";
 
 mermaid.initialize({
@@ -49,17 +49,19 @@ let diagramCounter = 0;
 
 export default function DiagramView({ data, onTableClick }) {
   const containerRef = useRef(null);
-  const idRef = useRef(`mermaid-${++diagramCounter}`);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     if (!containerRef.current) return;
 
     const definition = buildMermaidSyntax(data);
-    const id = idRef.current;
 
     async function render() {
       try {
         containerRef.current.innerHTML = "";
+        // Use a fresh ID every render to prevent Mermaid's internal ID cache
+        // from returning a stale or duplicate SVG
+        const id = `mermaid-${++diagramCounter}`;
         const { svg } = await mermaid.render(id, definition);
         containerRef.current.innerHTML = svg;
 
@@ -115,12 +117,47 @@ export default function DiagramView({ data, onTableClick }) {
     render();
   }, [data, onTableClick]);
 
+  // Dim/highlight SVG entity nodes based on search
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const svgEl = containerRef.current.querySelector("svg");
+    if (!svgEl) return;
+    const entities = svgEl.querySelectorAll('g[id^="entity-"]');
+    entities.forEach((g) => {
+      if (!search) {
+        g.style.opacity = "1";
+        return;
+      }
+      const label = g.querySelector("text")?.textContent?.trim() || "";
+      g.style.opacity = label.toLowerCase().includes(search.toLowerCase()) ? "1" : "0.15";
+    });
+  }, [search]);
+
+  const filteredTables = data.tables.filter((t) =>
+    t.toLowerCase().includes(search.toLowerCase())
+  );
+
   return (
     <div className="diagram-wrapper">
       <h2 className="section-title">Entity Relationship Diagram</h2>
 
+      <div className="diagram-search-row">
+        <input
+          className="diagram-search"
+          type="text"
+          placeholder="Search tables…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        {search && (
+          <button className="diagram-search-clear" onClick={() => setSearch("")}>
+            ✕
+          </button>
+        )}
+      </div>
+
       <div className="table-chips">
-        {data.tables.map((table) => (
+        {filteredTables.map((table) => (
           <button
             key={table}
             className="table-chip"
@@ -129,6 +166,9 @@ export default function DiagramView({ data, onTableClick }) {
             {table}
           </button>
         ))}
+        {filteredTables.length === 0 && search && (
+          <span className="no-match">No tables match "{search}"</span>
+        )}
       </div>
 
       <div className="diagram-container" ref={containerRef} />

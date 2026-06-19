@@ -45,6 +45,7 @@ def _call_llm(client, content: str) -> str:
     message = client.messages.create(
         model="claude-opus-4-6",
         max_tokens=4096,
+        temperature=0,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": USER_PROMPT_TEMPLATE.format(content=content)}],
     )

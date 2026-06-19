@@ -116,6 +116,50 @@ body {
   gap: 8px;
 }
 
+/* ── Diagram Search ───────────────────────────────────────── */
+.diagram-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  max-width: 320px;
+}
+
+.diagram-search {
+  flex: 1;
+  padding: 7px 12px;
+  border: 1px solid #b0bce8;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.diagram-search:focus {
+  border-color: #2196F3;
+  box-shadow: 0 0 0 3px rgba(33,150,243,0.15);
+}
+
+.diagram-search-clear {
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+
+.diagram-search-clear:hover { color: #333; }
+
+.no-match {
+  font-size: 0.82rem;
+  color: #999;
+  font-style: italic;
+}
+
 /* ── Table Chips ──────────────────────────────────────────── */
 .table-chips {
   display: flex;
