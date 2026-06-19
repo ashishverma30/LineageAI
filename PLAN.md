@@ -4,7 +4,7 @@ Work through these one at a time. Mark `[x]` when done.
 
 ---
 
-## [ ] Task 1 — Show Column Names in ER Diagram
+## [x] Task 1 — Show Column Names in ER Diagram
 
 In the Mermaid ER diagram, each entity box should list its columns (not just the table name).
 Claude already returns `column_lineage` with `target_column` and `source_column` — use those
