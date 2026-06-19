@@ -8,12 +8,17 @@ To swap Claude for Llama3, change these 3 lines:
 """
 
 import asyncio
+import hashlib
 import json
 import os
 import re
 from functools import partial
 
 import anthropic  # LINE A — swap this import for Llama3
+
+# File-level LLM cache: sha256(content) → parsed result dict
+_llm_cache: dict[str, dict] = {}
+_MAX_FILE_CACHE = 500
 
 
 SYSTEM_PROMPT = (
@@ -70,10 +75,24 @@ def _parse_json(raw: str) -> dict:
 
 async def analyze_file(content: str) -> dict:
     """Call LLM on a single file's content. Runs sync client in thread pool. Never raises."""
+    cache_key = hashlib.sha256(content.encode()).hexdigest()
+    if cache_key in _llm_cache:
+        return dict(_llm_cache[cache_key])
     try:
         client = _get_client()
         loop = asyncio.get_event_loop()
         raw = await loop.run_in_executor(None, partial(_call_llm, client, content))
-        return _parse_json(raw)
+        result = _parse_json(raw)
+        if len(_llm_cache) < _MAX_FILE_CACHE:
+            _llm_cache[cache_key] = result
+        return dict(result)
     except Exception:
         return dict(EMPTY_RESULT)
+
+
+def cache_stats() -> dict:
+    return {"file_cache_size": len(_llm_cache), "file_cache_max": _MAX_FILE_CACHE}
+
+
+def clear_file_cache() -> None:
+    _llm_cache.clear()

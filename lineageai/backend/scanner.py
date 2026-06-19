@@ -10,8 +10,12 @@ def _should_skip(path: str) -> bool:
     return any(part in SKIP_DIRS for part in parts)
 
 
-async def scan_repo(repo_url: str, token: str) -> list[dict]:
-    """Walk a GitHub repo and return list of {path, content, extension} for .sql and .py files."""
+async def scan_repo(repo_url: str, token: str) -> tuple[list[dict], str]:
+    """Walk a GitHub repo and return (files, commit_sha).
+
+    files: list of {path, content, extension}
+    commit_sha: HEAD commit SHA of the default branch (used as repo-level cache key)
+    """
     base_url = os.getenv("GITHUB_BASE_URL", "https://api.github.com")
 
     # Support GitHub Enterprise by passing a custom base_url
@@ -31,9 +35,14 @@ async def scan_repo(repo_url: str, token: str) -> list[dict]:
     except Exception as e:
         raise ValueError(f"Could not access repo '{repo_path}': {type(e).__name__}: {e}")
 
+    try:
+        commit_sha = repo.get_branch(repo.default_branch).commit.sha
+    except Exception:
+        commit_sha = ""
+
     files = []
     _walk_tree(repo, "", files)
-    return files
+    return files, commit_sha
 
 
 def _parse_repo_path(repo_url: str) -> str:

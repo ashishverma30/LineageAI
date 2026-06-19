@@ -8,8 +8,13 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+import ai_parser
 from ai_parser import analyze_file
 from scanner import scan_repo
+
+# Repo-level cache: "{repo_url}#{commit_sha}" → full /scan response dict
+_scan_cache: dict[str, dict] = {}
+_MAX_SCAN_CACHE = 10
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -42,21 +47,29 @@ async def health():
 
 @app.post("/scan")
 async def scan(request: ScanRequest):
-    # Step 1: Walk the repo and collect .sql / .py files
+    # Step 1: Walk the repo and collect .sql / .py files + commit SHA
     try:
-        files = await scan_repo(request.repo_url, request.token)
+        files, commit_sha = await scan_repo(request.repo_url, request.token)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logging.error("scan_repo failed: %s", traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Failed to access repository: {type(e).__name__}: {e}")
 
-    # Step 2: Run each file through the LLM parser and merge results
+    # Step 2: Check repo-level cache (only when we have a reliable commit SHA)
+    repo_cache_key = f"{request.repo_url}#{commit_sha}" if commit_sha else ""
+    if repo_cache_key and repo_cache_key in _scan_cache:
+        logging.info("Repo cache hit for %s @ %s", request.repo_url, commit_sha[:7])
+        cached = dict(_scan_cache[repo_cache_key])
+        cached["cached"] = True
+        return cached
+
+    # Step 3: Run each file through the LLM parser and merge results
     all_tables: list[str] = []
     all_relationships: list[dict] = []
     all_column_lineage: list[dict] = []
 
-    # Run all files through the LLM in parallel
+    # Run all files through the LLM in parallel (file-level cache hits are instant)
     results = await asyncio.gather(*[analyze_file(f["content"]) for f in files])
 
     for result in results:
@@ -71,13 +84,13 @@ async def scan(request: ScanRequest):
         all_relationships.extend(result.get("relationships", []))
         all_column_lineage.extend(_normalize_column_lineage(result.get("column_lineage", [])))
 
-    # Step 3: Deduplicate tables (preserve order)
+    # Step 4: Deduplicate tables (preserve order)
     unique_tables = list(dict.fromkeys(all_tables))
 
-    # Step 4: Build columns_by_table from normalized column_lineage
+    # Step 5: Build columns_by_table from normalized column_lineage
     columns_by_table = _build_columns_by_table(all_column_lineage)
 
-    # Step 5: Identify SOR (source-of-record) tables — tables that appear only
+    # Step 6: Identify SOR (source-of-record) tables — tables that appear only
     # as source, never as a target, in the column lineage graph
     target_tables = {e.get("target_table", "").lower() for e in all_column_lineage if e.get("target_table")}
     source_tables = {e.get("source_table", "").lower() for e in all_column_lineage if e.get("source_table")}
@@ -87,10 +100,10 @@ async def scan(request: ScanRequest):
     if not sor_tables:
         sor_tables = [t for t in unique_tables if t.lower().startswith(("raw_", "src_", "source_"))]
 
-    # Step 6: Extract repo name from URL
+    # Step 7: Extract repo name from URL
     repo_name = _extract_repo_name(request.repo_url)
 
-    return {
+    response = {
         "repo": repo_name,
         "scanned_files": len(files),
         "tables": unique_tables,
@@ -98,6 +111,32 @@ async def scan(request: ScanRequest):
         "column_lineage": all_column_lineage,
         "columns_by_table": columns_by_table,
         "sor_tables": sor_tables,
+        "cached": False,
+    }
+
+    # Store in repo-level cache
+    if repo_cache_key and len(_scan_cache) < _MAX_SCAN_CACHE:
+        _scan_cache[repo_cache_key] = response
+
+    return response
+
+
+@app.delete("/cache")
+async def clear_cache():
+    """Clear both the repo-level scan cache and the file-level LLM cache."""
+    _scan_cache.clear()
+    ai_parser.clear_file_cache()
+    return {"cleared": True}
+
+
+@app.get("/cache")
+async def cache_info():
+    """Return current cache sizes."""
+    stats = ai_parser.cache_stats()
+    return {
+        "scan_cache_size": len(_scan_cache),
+        "scan_cache_max": _MAX_SCAN_CACHE,
+        **stats,
     }
 
 
