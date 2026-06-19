@@ -74,7 +74,10 @@ async def scan(request: ScanRequest):
     # Step 3: Deduplicate tables (preserve order)
     unique_tables = list(dict.fromkeys(all_tables))
 
-    # Step 4: Extract repo name from URL
+    # Step 4: Build columns_by_table from normalized column_lineage
+    columns_by_table = _build_columns_by_table(all_column_lineage)
+
+    # Step 5: Extract repo name from URL
     repo_name = _extract_repo_name(request.repo_url)
 
     return {
@@ -83,6 +86,7 @@ async def scan(request: ScanRequest):
         "tables": unique_tables,
         "relationships": all_relationships,
         "column_lineage": all_column_lineage,
+        "columns_by_table": columns_by_table,
     }
 
 
@@ -153,6 +157,21 @@ def _normalize_column_lineage(entries: list) -> list:
                     })
 
     return normalized
+
+
+def _build_columns_by_table(column_lineage: list) -> dict:
+    """Derive {table_name: [col1, col2, ...]} from normalized column_lineage.
+    Collects both target and source columns so every table in the lineage graph
+    gets its columns surfaced.
+    """
+    cols: dict = {}
+    for entry in column_lineage:
+        for tbl_key, col_key in [("target_table", "target_column"), ("source_table", "source_column")]:
+            tbl = entry.get(tbl_key, "").strip().lower()
+            col = entry.get(col_key, "").strip().lower()
+            if tbl and col:
+                cols.setdefault(tbl, set()).add(col)
+    return {tbl: sorted(col_set) for tbl, col_set in cols.items()}
 
 
 def _extract_repo_name(repo_url: str) -> str:

@@ -10,12 +10,47 @@ mermaid.initialize({
 function buildMermaidSyntax(data) {
   const lines = ["erDiagram"];
 
+  // Build case-insensitive column lookup: sanitized-lowercase table → [col, ...]
+  const columnsByTable = data.columns_by_table || {};
+  const colMap = new Map();
+  Object.entries(columnsByTable).forEach(([tbl, cols]) => {
+    colMap.set(sanitize(tbl).toLowerCase(), cols);
+  });
+
+  // Collect every table that will appear (from relationships + data.tables)
+  const allTables = new Set();
+  (data.tables || []).forEach((t) => allTables.add(t));
+  (data.relationships || []).forEach((rel) => {
+    const rawFrom = rel.from || rel.from_table || rel.left_table || rel.source;
+    const rawTo   = rel.to   || rel.to_table   || rel.right_table || rel.target;
+    [rawFrom, rawTo].forEach((raw) => {
+      if (!raw) return;
+      allTables.add(raw.includes(".") ? raw.split(".")[0] : raw);
+    });
+  });
+
+  // Emit entity blocks with columns (cap at 12 to keep diagram readable)
+  const emitted = new Set();
+  allTables.forEach((table) => {
+    const key = sanitize(table).toLowerCase();
+    if (emitted.has(key)) return;
+    emitted.add(key);
+    const cols = colMap.get(key) || [];
+    if (cols.length > 0) {
+      lines.push(`  ${sanitize(table)} {`);
+      cols.slice(0, 12).forEach((col) => {
+        lines.push(`    string ${sanitize(col)}`);
+      });
+      lines.push(`  }`);
+    }
+  });
+
+  // Emit relationships
   if (data.relationships && data.relationships.length > 0) {
     const seen = new Set();
     for (const rel of data.relationships) {
-      // Extract table name — handles "table", "table.column", or explicit fields
       const extractTable = (val) => val && val.includes(".") ? val.split(".")[0] : val;
-      const extractCol  = (val) => val && val.includes(".") ? val.split(".")[1] : null;
+      const extractCol   = (val) => val && val.includes(".") ? val.split(".")[1] : null;
 
       const rawFrom = rel.from || rel.from_table || rel.left_table || rel.source;
       const rawTo   = rel.to   || rel.to_table   || rel.right_table || rel.target;
@@ -30,11 +65,14 @@ function buildMermaidSyntax(data) {
       seen.add(edge);
       lines.push(`    ${sanitize(fromTable)} ||--o{ ${sanitize(toTable)} : "${key}"`);
     }
-  } else if (data.tables && data.tables.length > 0) {
-    // No relationships — just list tables so something renders
-    for (const table of data.tables) {
-      lines.push(`    ${sanitize(table)} { string id }`);
-    }
+  } else {
+    // No relationships — emit placeholder column block so Mermaid renders something
+    (data.tables || []).forEach((table) => {
+      const key = sanitize(table).toLowerCase();
+      if (!colMap.has(key)) {
+        lines.push(`    ${sanitize(table)} { string id }`);
+      }
+    });
   }
 
   return lines.join("\n");
