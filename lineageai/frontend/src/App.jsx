@@ -42,11 +42,13 @@ export default function App() {
     setSelectedTable(null);
   }
 
-  // Filter flat column_lineage array for rows where source_table matches the selected table
+  // Filter column_lineage for rows that belong to the selected table (target_table)
+  // or fall back to source_table for legacy entries without a target_table
   const columnLineageForTable = selectedTable
     ? (diagramData?.column_lineage || []).filter((cl) => {
-        const src = (cl.source_table || cl.table || cl.source || "").toLowerCase();
-        return src === selectedTable.toLowerCase();
+        const tgt = (cl.target_table || cl.table || "").toLowerCase();
+        const src = (cl.source_table || cl.source || "").toLowerCase().split(".")[0];
+        return tgt === selectedTable.toLowerCase() || src === selectedTable.toLowerCase();
       })
     : [];
 
