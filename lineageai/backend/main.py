@@ -77,7 +77,17 @@ async def scan(request: ScanRequest):
     # Step 4: Build columns_by_table from normalized column_lineage
     columns_by_table = _build_columns_by_table(all_column_lineage)
 
-    # Step 5: Extract repo name from URL
+    # Step 5: Identify SOR (source-of-record) tables — tables that appear only
+    # as source, never as a target, in the column lineage graph
+    target_tables = {e.get("target_table", "").lower() for e in all_column_lineage if e.get("target_table")}
+    source_tables = {e.get("source_table", "").lower() for e in all_column_lineage if e.get("source_table")}
+    sor_set = source_tables - target_tables
+    sor_tables = [t for t in unique_tables if t.lower() in sor_set]
+    # Fallback: if none detected, use raw_/src_ prefix convention
+    if not sor_tables:
+        sor_tables = [t for t in unique_tables if t.lower().startswith(("raw_", "src_", "source_"))]
+
+    # Step 6: Extract repo name from URL
     repo_name = _extract_repo_name(request.repo_url)
 
     return {
@@ -87,6 +97,7 @@ async def scan(request: ScanRequest):
         "relationships": all_relationships,
         "column_lineage": all_column_lineage,
         "columns_by_table": columns_by_table,
+        "sor_tables": sor_tables,
     }
 
 

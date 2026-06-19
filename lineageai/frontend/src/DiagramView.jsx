@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
 import mermaid from "mermaid";
 
 mermaid.initialize({
@@ -85,9 +85,8 @@ function sanitize(name) {
 
 let diagramCounter = 0;
 
-export default function DiagramView({ data, onTableClick }) {
+export default function DiagramView({ data, onTableClick, highlightTable }) {
   const containerRef = useRef(null);
-  const [search, setSearch] = useState("");
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -155,60 +154,28 @@ export default function DiagramView({ data, onTableClick }) {
     render();
   }, [data, onTableClick]);
 
-  // Dim/highlight SVG entity nodes based on search
+  // Dim all entity nodes except the highlighted table when one is selected in L1
   useEffect(() => {
     if (!containerRef.current) return;
     const svgEl = containerRef.current.querySelector("svg");
     if (!svgEl) return;
     const entities = svgEl.querySelectorAll('g[id^="entity-"]');
     entities.forEach((g) => {
-      if (!search) {
+      if (!highlightTable) {
         g.style.opacity = "1";
         return;
       }
       const label = g.querySelector("text")?.textContent?.trim() || "";
-      g.style.opacity = label.toLowerCase().includes(search.toLowerCase()) ? "1" : "0.15";
+      g.style.opacity = label.toLowerCase() === highlightTable.toLowerCase() ? "1" : "0.2";
     });
-  }, [search]);
-
-  const filteredTables = data.tables.filter((t) =>
-    t.toLowerCase().includes(search.toLowerCase())
-  );
+  }, [highlightTable]);
 
   return (
     <div className="diagram-wrapper">
       <h2 className="section-title">Entity Relationship Diagram</h2>
-
-      <div className="diagram-search-row">
-        <input
-          className="diagram-search"
-          type="text"
-          placeholder="Search tables…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        {search && (
-          <button className="diagram-search-clear" onClick={() => setSearch("")}>
-            ✕
-          </button>
-        )}
-      </div>
-
-      <div className="table-chips">
-        {filteredTables.map((table) => (
-          <button
-            key={table}
-            className="table-chip"
-            onClick={() => onTableClick(table)}
-          >
-            {table}
-          </button>
-        ))}
-        {filteredTables.length === 0 && search && (
-          <span className="no-match">No tables match "{search}"</span>
-        )}
-      </div>
-
+      {highlightTable && (
+        <p className="diagram-hint">Showing: <strong>{highlightTable}</strong> — click another node or clear selection to reset</p>
+      )}
       <div className="diagram-container" ref={containerRef} />
     </div>
   );

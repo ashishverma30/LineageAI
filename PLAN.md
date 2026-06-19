@@ -19,7 +19,7 @@ to populate Mermaid entity attribute blocks.
 
 ---
 
-## [ ] Task 2 — Two-Panel UI Redesign
+## [x] Task 2 — Two-Panel UI Redesign
 
 Replace the current single-column layout with a fixed two-panel layout.
 
