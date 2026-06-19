@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import JsonInspector, { buildTableJson } from "./JsonInspector";
 
 export default function LeftPanel({
   data,
@@ -12,6 +13,7 @@ export default function LeftPanel({
   onSorColumnSelect,
 }) {
   const [tableSearch, setTableSearch] = useState("");
+  const [jsonOpen, setJsonOpen] = useState(false);
 
   const tables = data.tables || [];
   const columnsByTable = data.columns_by_table || {};
@@ -56,11 +58,24 @@ export default function LeftPanel({
           ))}
         </select>
         {selectedTable && (
-          <button className="lp-clear-btn" onClick={() => onTableSelect(null)}>
-            Clear selection
-          </button>
+          <div className="lp-table-actions">
+            <button className="lp-clear-btn" onClick={() => onTableSelect(null)}>
+              Clear
+            </button>
+            <button className="lp-json-btn" onClick={() => setJsonOpen(true)}>
+              {"{ }"} View JSON
+            </button>
+          </div>
         )}
       </section>
+
+      {jsonOpen && selectedTable && (
+        <JsonInspector
+          tableName={selectedTable}
+          json={buildTableJson(data, selectedTable)}
+          onClose={() => setJsonOpen(false)}
+        />
+      )}
 
       {/* ── L2: Column Lineage ── */}
       <section className="lp-section">

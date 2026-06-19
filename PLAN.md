@@ -60,7 +60,7 @@ the right panel without a full page reload.
 
 ---
 
-## [ ] Task 3 — JSON Inspector per Table
+## [x] Task 3 — JSON Inspector per Table
 
 Add a button/toggle in the dashboard that lets the user inspect the raw JSON
 for any selected table.
