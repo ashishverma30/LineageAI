@@ -100,6 +100,13 @@ async def scan(request: ScanRequest):
     if not sor_tables:
         sor_tables = [t for t in unique_tables if t.lower().startswith(("raw_", "src_", "source_"))]
 
+    # ODL = tables that appear only as targets, never as sources (mirror of SOR)
+    odl_set = target_tables - source_tables
+    odl_tables = [t for t in unique_tables if t.lower() in odl_set]
+    # Fallback: odl_/mart_/gold_/final_ prefix convention
+    if not odl_tables:
+        odl_tables = [t for t in unique_tables if t.lower().startswith(("odl_", "mart_", "gold_", "final_"))]
+
     # Step 7: Extract repo name from URL
     repo_name = _extract_repo_name(request.repo_url)
 
@@ -111,6 +118,7 @@ async def scan(request: ScanRequest):
         "column_lineage": all_column_lineage,
         "columns_by_table": columns_by_table,
         "sor_tables": sor_tables,
+        "odl_tables": odl_tables,
         "cached": False,
     }
 
