@@ -4,6 +4,7 @@ import ScanForm from "./ScanForm";
 import DiagramView from "./DiagramView";
 import LeftPanel from "./LeftPanel";
 import ColumnFlow from "./ColumnFlow";
+import MedallionView from "./MedallionView";
 import "./App.css";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "http://localhost:8000";
@@ -57,8 +58,10 @@ export default function App() {
     setSelectedSorColumn(col);
   }, []);
 
-  // Derive right-panel mode from what the user has selected
-  // SOR flow takes priority, then column lineage, then ER diagram
+  // Right panel tab: "diagram" (default) or "medallion"
+  const [rightTab, setRightTab] = useState("diagram");
+
+  // Within the diagram tab, mode is derived from selections
   const rightMode = selectedSorColumn ? "sor" : selectedColumn ? "column" : "diagram";
 
   return (
@@ -100,35 +103,62 @@ export default function App() {
           />
 
           <div className="right-panel">
-            {rightMode === "diagram" && !selectedTable && (
-              <div className="right-panel-empty">
-                <div className="right-panel-empty-icon">⬡</div>
-                <p>Select a table from the left panel</p>
-                <span>Its ER diagram and direct relationships will appear here</span>
+            {/* ── Tab bar ── */}
+            <div className="right-panel-tabs">
+              <button
+                className={`rp-tab${rightTab === "diagram" ? " rp-tab--active" : ""}`}
+                onClick={() => setRightTab("diagram")}
+              >
+                ER Diagram
+              </button>
+              <button
+                className={`rp-tab${rightTab === "medallion" ? " rp-tab--active" : ""}`}
+                onClick={() => setRightTab("medallion")}
+              >
+                Medallion View
+              </button>
+            </div>
+
+            {/* ── Tab content ── */}
+            {rightTab === "diagram" && (
+              <div className="right-panel-content">
+                {rightMode === "diagram" && !selectedTable && (
+                  <div className="right-panel-empty">
+                    <div className="right-panel-empty-icon">⬡</div>
+                    <p>Select a table from the left panel</p>
+                    <span>Its ER diagram and direct relationships will appear here</span>
+                  </div>
+                )}
+                {rightMode === "diagram" && selectedTable && (
+                  <DiagramView
+                    data={diagramData}
+                    onTableClick={handleTableSelect}
+                    highlightTable={selectedTable}
+                  />
+                )}
+                {rightMode === "column" && (
+                  <ColumnFlow
+                    mode="column"
+                    tableName={selectedTable}
+                    columnName={selectedColumn}
+                    columnLineage={diagramData.column_lineage || []}
+                  />
+                )}
+                {rightMode === "sor" && (
+                  <ColumnFlow
+                    mode="sor"
+                    sorTable={selectedSorTable}
+                    sorColumn={selectedSorColumn}
+                    columnLineage={diagramData.column_lineage || []}
+                  />
+                )}
               </div>
             )}
-            {rightMode === "diagram" && selectedTable && (
-              <DiagramView
-                data={diagramData}
-                onTableClick={handleTableSelect}
-                highlightTable={selectedTable}
-              />
-            )}
-            {rightMode === "column" && (
-              <ColumnFlow
-                mode="column"
-                tableName={selectedTable}
-                columnName={selectedColumn}
-                columnLineage={diagramData.column_lineage || []}
-              />
-            )}
-            {rightMode === "sor" && (
-              <ColumnFlow
-                mode="sor"
-                sorTable={selectedSorTable}
-                sorColumn={selectedSorColumn}
-                columnLineage={diagramData.column_lineage || []}
-              />
+
+            {rightTab === "medallion" && (
+              <div className="right-panel-content">
+                <MedallionView data={diagramData} />
+              </div>
             )}
           </div>
         </div>
